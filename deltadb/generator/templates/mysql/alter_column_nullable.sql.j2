@@ -1,0 +1,4 @@
+-- MySQL requires full column redefinition for NOT NULL changes.
+-- Update the type and other attributes as needed.
+ALTER TABLE {{ table | quote_id }}
+    MODIFY COLUMN {{ column | quote_id }} {% if new_value %}-- DROP NOT NULL (add column type here){% else %}-- SET NOT NULL (add column type here){% endif %};

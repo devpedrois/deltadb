@@ -1,0 +1,3 @@
+ALTER TABLE {{ table | quote_id }}
+    ADD{% if fk.name %} CONSTRAINT {{ fk.name | quote_id }}{% endif %} FOREIGN KEY ({{ fk.columns | map('quote_id') | join(', ') }})
+    REFERENCES {{ fk.referred_table | quote_id }} ({{ fk.referred_columns | map('quote_id') | join(', ') }}){% if fk.on_delete %} ON DELETE {{ fk.on_delete | safe_on_action }}{% endif %}{% if fk.on_update %} ON UPDATE {{ fk.on_update | safe_on_action }}{% endif %};

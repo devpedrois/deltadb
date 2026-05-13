@@ -1,0 +1,5 @@
+-- ⚠️ DESTRUCTIVE — data may be lost
+-- SQLite does not support ALTER COLUMN TYPE directly.
+-- Recreate the table with the new schema.
+-- Old type: {{ old_type | validate_type }} → New type: {{ new_type | validate_type }}
+-- Table: {{ table | quote_id }}, Column: {{ column | quote_id }}

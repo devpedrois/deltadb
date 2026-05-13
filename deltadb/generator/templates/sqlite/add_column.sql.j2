@@ -1,0 +1,2 @@
+ALTER TABLE {{ table | quote_id }}
+    ADD COLUMN {{ column.name | quote_id }} {{ column.type | validate_type }}{% if not column.nullable %} NOT NULL{% endif %}{% if column.default is not none %} DEFAULT {{ column.default | safe_default }}{% endif %};

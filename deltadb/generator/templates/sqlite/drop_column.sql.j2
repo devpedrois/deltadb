@@ -1,0 +1,3 @@
+-- ⚠️ DESTRUCTIVE
+ALTER TABLE {{ table | quote_id }}
+    DROP COLUMN {{ column.name | quote_id }};

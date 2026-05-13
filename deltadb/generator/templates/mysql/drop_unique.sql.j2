@@ -1,0 +1,2 @@
+ALTER TABLE {{ table | quote_id }}
+    DROP INDEX {% if uc.name %}{{ uc.name | quote_id }}{% else %}-- UC name unknown{% endif %};

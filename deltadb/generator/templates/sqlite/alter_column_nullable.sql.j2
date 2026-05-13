@@ -1,0 +1,4 @@
+-- SQLite does not support ALTER COLUMN NOT NULL directly.
+-- Recreate the table with the updated column definition.
+-- Table: {{ table | quote_id }}, Column: {{ column | quote_id }}
+-- New nullable: {{ new_value }}

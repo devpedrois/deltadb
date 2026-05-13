@@ -1,0 +1,4 @@
+-- SQLite does not support ALTER COLUMN DEFAULT directly.
+-- Recreate the table with the updated column definition.
+-- Table: {{ table | quote_id }}, Column: {{ column | quote_id }}
+-- New default: {{ new_default if new_default is not none else 'NULL' }}

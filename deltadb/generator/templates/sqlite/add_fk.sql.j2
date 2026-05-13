@@ -1,0 +1,6 @@
+-- SQLite foreign keys are defined at table creation time.
+-- To add a FK, recreate the table with the FK constraint.
+-- Table: {{ table | quote_id }}
+-- FK: ({{ fk.columns | map('quote_id') | join(', ') }}) -> {{ fk.referred_table | quote_id }} ({{ fk.referred_columns | map('quote_id') | join(', ') }})
+{% if fk.on_delete %}-- ON DELETE: {{ fk.on_delete | safe_on_action }}{% endif %}
+{% if fk.on_update %}-- ON UPDATE: {{ fk.on_update | safe_on_action }}{% endif %}

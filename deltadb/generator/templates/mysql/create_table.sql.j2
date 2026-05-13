@@ -1,0 +1,27 @@
+{% set parts = [] %}
+{% for col in columns %}
+{% if col.nullable %}
+{% set col_def = col.name | quote_id ~ ' ' ~ (col.type | validate_type) %}
+{% else %}
+{% set col_def = col.name | quote_id ~ ' ' ~ (col.type | validate_type) ~ ' NOT NULL' %}
+{% endif %}
+{% if col.default is not none %}
+{% set col_def = col_def ~ ' DEFAULT ' ~ (col.default | safe_default) %}
+{% endif %}
+{% set _ = parts.append(col_def) %}
+{% endfor %}
+{% if primary_key and primary_key.columns %}
+{% set pk_def = 'PRIMARY KEY (' ~ (primary_key.columns | map('quote_id') | join(', ')) ~ ')' %}
+{% set _ = parts.append(pk_def) %}
+{% endif %}
+{% for uc in unique_constraints %}
+{% if uc.name %}
+{% set uc_def = 'CONSTRAINT ' ~ (uc.name | quote_id) ~ ' UNIQUE (' ~ (uc.columns | map('quote_id') | join(', ')) ~ ')' %}
+{% else %}
+{% set uc_def = 'UNIQUE (' ~ (uc.columns | map('quote_id') | join(', ')) ~ ')' %}
+{% endif %}
+{% set _ = parts.append(uc_def) %}
+{% endfor %}
+CREATE TABLE {{ table | quote_id }} (
+    {{ parts | join(',\n    ') }}
+);

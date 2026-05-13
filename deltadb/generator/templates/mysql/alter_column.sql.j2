@@ -1,0 +1,3 @@
+-- ⚠️ DESTRUCTIVE — data may be lost
+ALTER TABLE {{ table | quote_id }}
+    MODIFY COLUMN {{ column | quote_id }} {{ new_type | validate_type }};

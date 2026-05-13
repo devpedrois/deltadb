@@ -1,0 +1,2 @@
+CREATE UNIQUE INDEX {% if uc.name %}{{ uc.name | quote_id }}{% endif %}
+    ON {{ table | quote_id }} ({{ uc.columns | map('quote_id') | join(', ') }});
