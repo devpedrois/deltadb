@@ -11,8 +11,16 @@ VALID_IDENTIFIER_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 # NOTE: after VALID_IDENTIFIER_RE passes, only xp_ prefix is still meaningful.
 _IDENTIFIER_CHAR_BLOCKLIST = [";", "--", "/*", "*/", "\n", "\r", "\x00", "\\"]
 
-# [SECURITY] Allowlist for SQL column types — base_type or base_type(params)
-VALID_TYPE_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9 _]*(?: *\([a-zA-Z0-9, ]+\))?$")
+# [SECURITY] Allowlist for SQL column types. Supports:
+#   - Simple:          integer, boolean, jsonb
+#   - Parameterized:   varchar(255), numeric(10, 2)
+#   - Multi-word:      double precision, character varying(255)
+#   - Hyphenated:      user-defined  (SQLAlchemy reflects custom/enum types this way)
+#   - Array suffix:    integer[], varchar(255)[]  (PostgreSQL ARRAY columns)
+# The (?:\[\])* at the end matches zero or more [] suffixes for array dimensions.
+VALID_TYPE_RE = re.compile(
+    r"^[a-zA-Z][a-zA-Z0-9 _-]*(?: *\([a-zA-Z0-9, ]+\))?(?:\[\])*$"
+)
 _TYPE_DANGEROUS = [";", "--", "/*", "*/", "\n", "\r", "\x00"]
 
 # [SECURITY] SQL DDL/DML keywords blocked in column type fields.
@@ -62,8 +70,9 @@ def validate_column_type(type_str: str) -> None:
     # [SECURITY] Column type allowlist — prevents type-field SQL injection
     if not type_str or not type_str.strip():
         raise SecurityError("Column type cannot be empty")
-    if len(type_str) > 64:
-        raise SecurityError(f"Column type too long: {len(type_str)} chars (max 64)")
+    # Limit raised to 128: "timestamp without time zone[]" + longer enum names
+    if len(type_str) > 128:
+        raise SecurityError(f"Column type too long: {len(type_str)} chars (max 128)")
     if not VALID_TYPE_RE.match(type_str.strip()):
         raise SecurityError(
             f"Invalid column type '{type_str[:40]}': only "

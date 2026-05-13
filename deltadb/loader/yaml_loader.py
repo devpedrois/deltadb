@@ -29,7 +29,7 @@ def _parse_table(name: str, table_def: dict, dialect: str) -> Table:
             name=col["name"],
             type=normalize_type(col["type"], dialect),
             nullable=col.get("nullable", True),
-            default=col.get("default"),
+            default=str(col["default"]) if col.get("default") is not None else None,
             primary_key=col.get("primary_key", False),
             autoincrement=col.get("autoincrement", False),
         )
