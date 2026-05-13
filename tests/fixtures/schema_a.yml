@@ -1,0 +1,42 @@
+dialect: postgresql
+tables:
+  users:
+    columns:
+      - name: id
+        type: uuid
+        primary_key: true
+        nullable: false
+      - name: email
+        type: varchar(255)
+        nullable: false
+      - name: name
+        type: varchar(100)
+        nullable: true
+      - name: created_at
+        type: timestamptz
+        nullable: true
+    indexes:
+      - name: idx_users_email
+        columns: [email]
+        unique: true
+    unique_constraints:
+      - name: uq_users_email
+        columns: [email]
+  orders:
+    columns:
+      - name: id
+        type: serial
+        primary_key: true
+        nullable: false
+      - name: user_id
+        type: uuid
+        nullable: false
+      - name: total_cents
+        type: bigint
+        nullable: true
+    foreign_keys:
+      - name: fk_orders_user
+        columns: [user_id]
+        referred_table: users
+        referred_columns: [id]
+        on_delete: CASCADE

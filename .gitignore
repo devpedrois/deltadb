@@ -1,0 +1,16 @@
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.env
+.env.*
+output/*.sql
+output/*.json
+.pytest_cache/
+.coverage
+htmlcov/
+dist/
+*.egg-info/
+secrets/*.txt
+.ruff_cache/
