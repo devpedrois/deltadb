@@ -4,6 +4,23 @@ from deltadb.config import SUPPORTED_OUTPUT_EXTENSIONS
 from deltadb.exceptions import SecurityError
 
 
+def validate_input_path(path_str: str) -> None:
+    """Reject path traversal in schema input file paths.
+
+    # [SECURITY] Path traversal prevention for input files — an attacker
+    # passing '../../etc/secrets.yml' as schema source must be blocked.
+    """
+    p = Path(path_str)
+    if p.is_absolute():
+        raise SecurityError(
+            f"Absolute input path not allowed: '{path_str}'. Use relative paths only."
+        )
+    if ".." in p.parts:
+        raise SecurityError(
+            f"Path traversal detected in input path: '{path_str}' contains '..'"
+        )
+
+
 def validate_output_path(path_str: str) -> Path:
     p = Path(path_str)
     # [SECURITY] Absolute paths escape the working directory without needing '..'.

@@ -16,7 +16,6 @@ from deltadb.security.identifiers import (
 )
 from deltadb.security.path_safety import validate_output_path
 
-
 # ── Bug 1: xp_ false positive ────────────────────────────────────────────────
 #
 # DANGEROUS_PATTERNS includes "xp_" to block MSSQL xp_cmdshell.
