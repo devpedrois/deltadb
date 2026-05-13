@@ -1,0 +1,85 @@
+services:
+  postgres:
+    # [SECURITY] Pinned image version — never :latest
+    image: postgres:16.3-alpine3.20
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: deltadb_dev
+      POSTGRES_USER: deltadb_user
+      # [SECURITY] Docker Secret — not plain env var POSTGRES_PASSWORD
+      POSTGRES_PASSWORD_FILE: /run/secrets/pg_password
+    secrets:
+      - pg_password
+    # [SECURITY] localhost bind only — never 0.0.0.0
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    networks:
+      - deltadb_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U deltadb_user -d deltadb_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    security_opt:
+      # [SECURITY] Prevent privilege escalation inside container
+      - no-new-privileges:true
+    # [SECURITY] Read-only root filesystem — minimizes attack surface
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/run/postgresql
+    cap_drop:
+      # [SECURITY] Drop all Linux capabilities — least privilege
+      - ALL
+
+  mysql:
+    # [SECURITY] Pinned image version — never :latest
+    image: mysql:8.0.37
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: deltadb_dev
+      MYSQL_USER: deltadb_user
+      # [SECURITY] Docker Secrets — not plain env vars MYSQL_PASSWORD / MYSQL_ROOT_PASSWORD
+      MYSQL_PASSWORD_FILE: /run/secrets/mysql_password
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/mysql_root_password
+    secrets:
+      - mysql_password
+      - mysql_root_password
+    # [SECURITY] localhost bind only — never 0.0.0.0
+    ports:
+      - "127.0.0.1:3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - deltadb_net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "--silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    security_opt:
+      # [SECURITY] Prevent privilege escalation inside container
+      - no-new-privileges:true
+    cap_drop:
+      # [SECURITY] Drop all Linux capabilities — least privilege
+      - ALL
+
+volumes:
+  pg_data:
+  mysql_data:
+
+secrets:
+  pg_password:
+    file: ./secrets/pg_password.txt
+  mysql_password:
+    file: ./secrets/mysql_password.txt
+  mysql_root_password:
+    file: ./secrets/mysql_root_password.txt
+
+networks:
+  deltadb_net:
+    driver: bridge

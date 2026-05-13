@@ -1,0 +1,13 @@
+# Override for test environment: isolated databases, no exposed ports
+services:
+  postgres:
+    environment:
+      POSTGRES_DB: deltadb_test
+    # [SECURITY] No port exposure in CI — containers communicate internally only
+    ports: []
+
+  mysql:
+    environment:
+      MYSQL_DATABASE: deltadb_test
+    # [SECURITY] No port exposure in CI — containers communicate internally only
+    ports: []

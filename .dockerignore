@@ -1,0 +1,20 @@
+.git/
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+htmlcov/
+dist/
+*.egg-info/
+.env
+.env.*
+# [SECURITY] Never copy real secrets into image
+secrets/*.txt
+output/
+tests/
+requirements-dev.txt
+Makefile
+*.md
+docker-compose*.yml
+.ruff_cache/
+.dockerignore
