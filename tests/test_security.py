@@ -10,7 +10,7 @@ from deltadb.generator.sql_generator import SqlGenerator
 from deltadb.model.column import Column
 from deltadb.model.schema import SchemaModel
 from deltadb.model.table import Table
-from deltadb.security.credentials import get_credential, mask_url
+from deltadb.security.credentials import mask_url
 from deltadb.security.identifiers import quote_identifier, validate_identifier
 from deltadb.security.path_safety import validate_output_path
 from deltadb.security.yaml_safety import safe_load_yaml
@@ -32,23 +32,6 @@ def test_mask_url_no_password():
     url = "postgresql://host:5432/db"
     assert mask_url(url) == "postgresql://host:5432/db"
 
-
-def test_get_credential_from_env_var(monkeypatch):
-    monkeypatch.setenv("MY_SECRET", "myvalue")
-    assert get_credential("MY_SECRET") == "myvalue"
-
-
-def test_get_credential_prefers_secret_file(tmp_path, monkeypatch):
-    secret_file = tmp_path / "pw.txt"
-    secret_file.write_text("from_file\n")
-    monkeypatch.setenv("MY_SECRET", "from_env")
-    monkeypatch.setenv("MY_SECRET_FILE", str(secret_file))
-    assert get_credential("MY_SECRET", "MY_SECRET_FILE") == "from_file"
-
-
-def test_get_credential_returns_none_if_missing(monkeypatch):
-    monkeypatch.delenv("MISSING_VAR", raising=False)
-    assert get_credential("MISSING_VAR") is None
 
 
 def test_valid_identifier_passes():

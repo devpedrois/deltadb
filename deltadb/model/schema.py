@@ -1,8 +1,6 @@
 from dataclasses import dataclass
 from types import MappingProxyType
 
-from deltadb.model.table import Table
-
 
 @dataclass(frozen=True)
 class SchemaModel:

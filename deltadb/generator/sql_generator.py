@@ -217,10 +217,8 @@ class SqlGenerator:
 
         elif ct == ChangeType.TABLE_DROPPED:
             obj = change.old_value
-            if direction == "up":
-                ctx["table_obj"] = obj
-            else:
-                ctx["table_obj"] = obj
+            ctx["table_obj"] = obj
+            if direction == "down":
                 ctx["columns"] = _table_columns(obj)
                 ctx["primary_key"] = _table_pk(obj)
                 ctx["unique_constraints"] = _table_ucs(obj)
