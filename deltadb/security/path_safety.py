@@ -34,7 +34,17 @@ def validate_input_path(path_str: str) -> None:
         raise SecurityError(
             f"Path traversal detected in input path: '{path_str}' contains '..'"
         )
-    # [SECURITY] Symlink check — file must not resolve outside cwd
+    # [SECURITY] Always resolve and verify containment in cwd — prevents TOCTOU symlink
+    # traversal where a symlink is created between the check and the open() call.
+    try:
+        resolved = p.resolve()
+        cwd = Path.cwd().resolve()
+        resolved.relative_to(cwd)
+    except ValueError:
+        raise SecurityError(
+            f"Path traversal detected: input path '{path_str}' resolves outside the working directory."
+        )
+    # [SECURITY] Explicit symlink check on existing files as a redundant layer
     if p.exists():
         _reject_symlink_escape(p, "input path")
 

@@ -239,7 +239,8 @@ def compare_foreign_keys(
 
 
 def _uc_key(uc: UniqueConstraint) -> tuple:
-    return tuple(sorted(uc.columns))
+    # Column order preserved — (a, b) and (b, a) are different indexes at the DB level
+    return tuple(uc.columns)
 
 
 def compare_unique_constraints(

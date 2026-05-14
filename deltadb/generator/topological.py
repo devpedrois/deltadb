@@ -88,17 +88,20 @@ def topological_sort_up(changes: list[Change], schema: SchemaModel) -> list[Chan
     sorted_names = _topo_sort_tables(deps)
 
     name_to_added = {c.table: c for c in table_added}
+    sorted_names_set = set(sorted_names)
     sorted_added = [name_to_added[n] for n in sorted_names if n in name_to_added]
-    unsorted_added = [c for c in table_added if c.table not in name_to_added]
+    # Tables not in topo output (e.g. added after deps changed): append in stable order
+    unsorted_added = [c for c in table_added if c.table not in sorted_names_set]
     sorted_added = sorted_added + unsorted_added
 
     dropped_deps = _build_dropped_fk_deps(table_dropped, schema)
     sorted_dropped_names = _topo_sort_tables(dropped_deps)
+    sorted_dropped_names_set = set(sorted_dropped_names)
     name_to_dropped = {c.table: c for c in table_dropped}
     sorted_dropped = [
         name_to_dropped[n] for n in sorted_dropped_names if n in name_to_dropped
     ]
-    unsorted_dropped = [c for c in table_dropped if c.table not in name_to_dropped]
+    unsorted_dropped = [c for c in table_dropped if c.table not in sorted_dropped_names_set]
     sorted_dropped = list(reversed(sorted_dropped + unsorted_dropped))
 
     return (
@@ -109,15 +112,13 @@ def topological_sort_up(changes: list[Change], schema: SchemaModel) -> list[Chan
 
 
 def _build_dropped_fk_deps(
-    changes: list[Change], schema: SchemaModel
+    dropped_changes: list[Change], schema: SchemaModel
 ) -> dict[str, set[str]]:
     """Return FK deps for tables being dropped (from old_value)."""
-    dropped_tables = {c.table for c in changes if c.type == ChangeType.TABLE_DROPPED}
+    dropped_tables = {c.table for c in dropped_changes}
     deps: dict[str, set[str]] = {t: set() for t in dropped_tables}
 
-    for change in changes:
-        if change.type != ChangeType.TABLE_DROPPED:
-            continue
+    for change in dropped_changes:
         table_obj = change.old_value
         if table_obj is None:
             continue

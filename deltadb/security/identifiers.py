@@ -104,6 +104,30 @@ def validate_default(value: str) -> None:
             raise SecurityError(f"Dangerous character in default value '{value[:40]}'")
 
 
+# [SECURITY] Reflected defaults from a real DB allow single/double quotes because
+# PostgreSQL sequence expressions (nextval('seq'::regclass)) and MySQL expressions
+# (CURRENT_TIMESTAMP, 'literal') require them. The critical injection vectors
+# (statement separator, comment markers, null bytes) are still blocked.
+_REFLECTED_DEFAULT_DANGEROUS = [";", "--", "/*", "*/", "\n", "\r", "\x00"]
+
+
+def validate_reflected_default(value: str) -> None:
+    """Validate a column default value reflected from a real database.
+
+    Less strict than validate_default — allows quotes needed for SQL expressions
+    like nextval('seq'::regclass), while still blocking statement injection.
+    """
+    if len(value) > 1024:
+        raise SecurityError(
+            f"Reflected default value too long: {len(value)} chars (max 1024)"
+        )
+    for pattern in _REFLECTED_DEFAULT_DANGEROUS:
+        if pattern in value:
+            raise SecurityError(
+                f"Dangerous pattern in reflected default value '{value[:40]}'"
+            )
+
+
 def quote_identifier(name: str, dialect: str) -> str:
     validate_identifier(name)
     # [SECURITY] Reject unknown dialects explicitly — silent fallthrough would

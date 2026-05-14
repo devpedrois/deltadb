@@ -1,3 +1,5 @@
+import logging
+
 from deltadb.loader.base import BaseLoader
 from deltadb.model.column import Column
 from deltadb.model.constraint import ForeignKey, PrimaryKey, UniqueConstraint
@@ -6,6 +8,8 @@ from deltadb.model.schema import SchemaModel
 from deltadb.model.table import Table
 from deltadb.model.types import normalize_type
 from deltadb.security.yaml_safety import safe_load_yaml
+
+_log = logging.getLogger(__name__)
 
 
 class YamlLoader(BaseLoader):
@@ -20,6 +24,15 @@ class YamlLoader(BaseLoader):
             tables[table_name] = _parse_table(
                 table_name, table_def, dialect or "postgresql"
             )
+        # Warn about FKs referencing tables not defined in this schema
+        for tname, table in tables.items():
+            for fk in table.foreign_keys:
+                if fk.referred_table not in tables:
+                    _log.warning(
+                        "Table '%s': FK '%s' references unknown table '%s' "
+                        "— cross-schema FK or missing definition",
+                        tname, fk.name or "(unnamed)", fk.referred_table,
+                    )
         return SchemaModel(tables=tables, dialect=dialect)
 
 

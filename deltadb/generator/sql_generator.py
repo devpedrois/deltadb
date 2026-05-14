@@ -55,8 +55,9 @@ _CHANGE_TO_UP_TEMPLATE: dict[ChangeType, str] = {
     ChangeType.COLUMN_TYPE_CHANGED: "alter_column.sql.j2",
     ChangeType.COLUMN_NULLABLE_CHANGED: "alter_column_nullable.sql.j2",
     ChangeType.COLUMN_DEFAULT_CHANGED: "alter_column_default.sql.j2",
-    ChangeType.COLUMN_PRIMARY_KEY_CHANGED: "alter_column_nullable.sql.j2",
-    ChangeType.COLUMN_AUTOINCREMENT_CHANGED: "alter_column_nullable.sql.j2",
+    # COLUMN_PRIMARY_KEY_CHANGED and COLUMN_AUTOINCREMENT_CHANGED are intentionally
+    # absent — they require manual DDL that is highly dialect-specific.
+    # _render_change emits a clearly labeled SQL comment instead of wrong SQL.
     ChangeType.INDEX_ADDED: "add_index.sql.j2",
     ChangeType.INDEX_DROPPED: "drop_index.sql.j2",
     ChangeType.FK_ADDED: "add_fk.sql.j2",
@@ -75,8 +76,7 @@ _CHANGE_TO_DOWN_TEMPLATE: dict[ChangeType, str] = {
     ChangeType.COLUMN_TYPE_CHANGED: "alter_column.sql.j2",
     ChangeType.COLUMN_NULLABLE_CHANGED: "alter_column_nullable.sql.j2",
     ChangeType.COLUMN_DEFAULT_CHANGED: "alter_column_default.sql.j2",
-    ChangeType.COLUMN_PRIMARY_KEY_CHANGED: "alter_column_nullable.sql.j2",
-    ChangeType.COLUMN_AUTOINCREMENT_CHANGED: "alter_column_nullable.sql.j2",
+    # COLUMN_PRIMARY_KEY_CHANGED and COLUMN_AUTOINCREMENT_CHANGED are intentionally absent.
     ChangeType.INDEX_ADDED: "drop_index.sql.j2",
     ChangeType.INDEX_DROPPED: "add_index.sql.j2",
     ChangeType.FK_ADDED: "drop_fk.sql.j2",
@@ -103,7 +103,11 @@ def _table_ucs(table_obj):
 class SqlGenerator:
     def __init__(self, dialect: Dialect) -> None:
         self._dialect = dialect
-        # [SECURITY] SandboxedEnvironment — prevents template injection
+        # [SECURITY] SandboxedEnvironment — prevents template injection via attribute traversal.
+        # autoescape=False is intentional: HTML escaping corrupts SQL output.
+        # ALL user-controlled values MUST pass through a registered filter (quote_id,
+        # safe_default, validate_type, safe_on_action). Audit: grep -rn
+        # '{{ [^|%][^}]*}}' deltadb/generator/templates/ --include="*.j2"
         self._env = SandboxedEnvironment(
             loader=PackageLoader("deltadb", f"generator/templates/{dialect.value}"),
             autoescape=False,
@@ -165,6 +169,17 @@ class SqlGenerator:
         return "\n\n".join(parts) + "\n" if parts else ""
 
     def _render_change(self, change: Change, direction: str) -> str:
+        # These change types require manual DDL — emit a clear comment instead of wrong SQL
+        if change.type in (ChangeType.COLUMN_PRIMARY_KEY_CHANGED, ChangeType.COLUMN_AUTOINCREMENT_CHANGED):
+            label = "PRIMARY KEY" if change.type == ChangeType.COLUMN_PRIMARY_KEY_CHANGED else "AUTOINCREMENT"
+            new_val = change.new_value if direction == "up" else change.old_value
+            return (
+                f"-- ⚠️  MANUAL MIGRATION REQUIRED: {label} changes cannot be auto-generated.\n"
+                f"-- Table: {change.table}, Column: {change.column}\n"
+                f"-- Target value: {new_val}\n"
+                f"-- Apply the appropriate DDL for your database engine manually."
+            )
+
         if direction == "up":
             template_map = _CHANGE_TO_UP_TEMPLATE
         else:
@@ -226,11 +241,7 @@ class SqlGenerator:
                 ctx["new_type"] = change.old_value
                 ctx["old_type"] = change.new_value
 
-        elif ct in (
-            ChangeType.COLUMN_NULLABLE_CHANGED,
-            ChangeType.COLUMN_PRIMARY_KEY_CHANGED,
-            ChangeType.COLUMN_AUTOINCREMENT_CHANGED,
-        ):
+        elif ct == ChangeType.COLUMN_NULLABLE_CHANGED:
             if direction == "up":
                 ctx["column"] = change.column
                 ctx["new_value"] = change.new_value

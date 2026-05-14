@@ -19,6 +19,21 @@ from deltadb.security.identifiers import (
 logger = logging.getLogger(__name__)
 
 _ALLOWED_ROOT_KEYS = {"dialect", "tables"}
+
+
+class _NoDuplicateKeyLoader(yaml.SafeLoader):
+    """SafeLoader subclass that raises LoaderError on duplicate YAML keys.
+
+    PyYAML's safe_load silently overwrites duplicate keys with the last value.
+    Duplicate table or column names would silently lose schema definitions.
+    """
+
+    def construct_mapping(self, node, deep=False):  # type: ignore[override]
+        keys = [self.construct_object(k, deep=deep) for k, _ in node.value]
+        duplicates = [k for k in keys if keys.count(k) > 1]
+        if duplicates:
+            raise LoaderError(f"Duplicate keys in YAML: {sorted(set(str(d) for d in duplicates))}")
+        return super().construct_mapping(node, deep=deep)
 _ALLOWED_TABLE_KEYS = {"columns", "indexes", "foreign_keys", "unique_constraints"}
 
 # [SECURITY] Allowlist for FK referential actions — prevents action-field injection
@@ -36,8 +51,10 @@ def safe_load_yaml(file_path: str) -> dict:
         max_mb = MAX_YAML_SIZE_BYTES // 1024 // 1024
         raise SecurityError(f"YAML file exceeds maximum size of {max_mb}MB. Aborting.")
     with open(path, encoding="utf-8") as f:
-        # [SECURITY] yaml.safe_load ONLY — yaml.load() executes arbitrary Python code
-        data = yaml.safe_load(f)
+        content = f.read()
+    # [SECURITY] _NoDuplicateKeyLoader extends SafeLoader — safe against code execution.
+    # Duplicate key detection catches silently overwritten table/column definitions.
+    data = yaml.load(content, Loader=_NoDuplicateKeyLoader)  # nosec B506
     if not isinstance(data, dict):
         raise LoaderError("YAML root must be a mapping")
     _validate_yaml_structure(data)

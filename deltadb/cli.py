@@ -5,6 +5,25 @@ import yaml
 from rich.console import Console
 from rich.markup import escape as markup_escape
 
+
+class _QuotedStr(str):
+    """String subclass that forces YAML double-quoting to prevent type coercion.
+
+    YAML parses bare values like 'true', 'null', '1e5' as non-string types.
+    Wrapping column defaults in _QuotedStr ensures they survive the round-trip.
+    """
+
+
+def _quoted_str_representer(dumper: yaml.Dumper, data: "_QuotedStr") -> yaml.ScalarNode:
+    return dumper.represent_scalar("tag:yaml.org,2002:str", data, style='"')
+
+
+class _SafeDumperWithQuotedStr(yaml.SafeDumper):
+    pass
+
+
+_SafeDumperWithQuotedStr.add_representer(_QuotedStr, _quoted_str_representer)
+
 from deltadb.diff.engine import DiffEngine
 from deltadb.diff.rename import RenameDetector
 from deltadb.exceptions import DeltaDbError, SecurityError
@@ -25,7 +44,9 @@ logger = logging.getLogger(__name__)
 def _configure_logging(verbose: bool) -> None:
     level = logging.DEBUG if verbose else logging.INFO
     logging.basicConfig(
-        level=level, format="%(asctime)s %(name)s %(levelname)s %(message)s"
+        level=level,
+        format="%(asctime)s %(name)s %(levelname)s %(message)s",
+        force=True,  # clears existing handlers — prevents no-op on repeated CLI calls in same process
     )
 
 
@@ -44,7 +65,9 @@ def _schema_to_dict(schema: SchemaModel) -> dict:
             if col.autoincrement:
                 col_dict["autoincrement"] = True
             if col.default is not None:
-                col_dict["default"] = col.default
+                # [SECURITY] _QuotedStr forces YAML double-quoting — prevents type coercion
+                # of values like "true", "null", "1e5" on snapshot round-trip
+                col_dict["default"] = _QuotedStr(col.default)
             t["columns"].append(col_dict)
         if table.indexes:
             t["indexes"] = [
@@ -95,7 +118,11 @@ def snapshot(source: str, output: str | None, verbose: bool) -> None:
         schema = create_loader(source).load()
         yml_data = _schema_to_dict(schema)
         yml_str = yaml.dump(
-            yml_data, default_flow_style=False, sort_keys=False, allow_unicode=True
+            yml_data,
+            Dumper=_SafeDumperWithQuotedStr,
+            default_flow_style=False,
+            sort_keys=False,
+            allow_unicode=True,
         )
         if output:
             out = validate_output_path(output)

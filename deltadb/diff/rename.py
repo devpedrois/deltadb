@@ -21,6 +21,9 @@ class RenameDetector:
         )
 
     def _col_sig(self, col) -> str:
+        # NOTE: encodes only type and nullability. When multiple dropped/added columns
+        # share the same signature, the 1:1 pairing is stable (alphabetical by column name)
+        # but semantically arbitrary — rename suggestions must always be reviewed by the user.
         return f"{col.type}:{col.nullable}"
 
     def _table_similarity(self, a: Table, b: Table) -> float:

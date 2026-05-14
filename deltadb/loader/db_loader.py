@@ -13,7 +13,7 @@ from deltadb.model.schema import SchemaModel
 from deltadb.model.table import Table
 from deltadb.model.types import normalize_type
 from deltadb.security.credentials import mask_url
-from deltadb.security.identifiers import validate_identifier
+from deltadb.security.identifiers import validate_identifier, validate_reflected_default
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +97,10 @@ class DbLoader(BaseLoader):
                 raw_default = str(c["default"])
                 # [SECURITY] Reject control characters in reflected defaults
                 _reject_dangerous_bytes(raw_default, "column default")
+                # [SECURITY] Reject SQL injection patterns in reflected defaults.
+                # Uses validate_reflected_default (not validate_default) because
+                # legitimate DB expressions like nextval('seq'::regclass) contain quotes.
+                validate_reflected_default(raw_default)
                 col_default = raw_default
             columns.append(Column(
                 name=c["name"],
@@ -139,12 +143,20 @@ class DbLoader(BaseLoader):
                 continue
             # [SECURITY] Validate index name and column names from DB
             validate_identifier(idx["name"])
+            valid_cols: list[str] = []
             for col_name in idx.get("column_names", []):
-                if col_name:
-                    validate_identifier(col_name)
+                if col_name is None:
+                    # Functional/expression indexes return None for the column name
+                    logger.warning(
+                        "Index '%s' on table '%s' has a functional/expression column — skipped",
+                        idx["name"], table_name,
+                    )
+                    continue
+                validate_identifier(col_name)
+                valid_cols.append(col_name)
             indexes.append(Index(
                 name=idx["name"],
-                columns=tuple(idx["column_names"]),
+                columns=tuple(valid_cols),
                 unique=bool(idx.get("unique", False)),
             ))
 
