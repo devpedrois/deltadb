@@ -63,6 +63,8 @@ _CHANGE_TO_UP_TEMPLATE: dict[ChangeType, str] = {
     ChangeType.FK_DROPPED: "drop_fk.sql.j2",
     ChangeType.UNIQUE_CONSTRAINT_ADDED: "add_unique.sql.j2",
     ChangeType.UNIQUE_CONSTRAINT_DROPPED: "drop_unique.sql.j2",
+    ChangeType.TABLE_RENAMED: "rename_table.sql.j2",
+    ChangeType.COLUMN_RENAMED: "rename_column.sql.j2",
 }
 
 _CHANGE_TO_DOWN_TEMPLATE: dict[ChangeType, str] = {
@@ -81,6 +83,8 @@ _CHANGE_TO_DOWN_TEMPLATE: dict[ChangeType, str] = {
     ChangeType.FK_DROPPED: "add_fk.sql.j2",
     ChangeType.UNIQUE_CONSTRAINT_ADDED: "drop_unique.sql.j2",
     ChangeType.UNIQUE_CONSTRAINT_DROPPED: "add_unique.sql.j2",
+    ChangeType.TABLE_RENAMED: "rename_table.sql.j2",
+    ChangeType.COLUMN_RENAMED: "rename_column.sql.j2",
 }
 
 
@@ -263,5 +267,20 @@ class SqlGenerator:
 
         elif ct == ChangeType.UNIQUE_CONSTRAINT_DROPPED:
             ctx["uc"] = change.old_value
+
+        elif ct == ChangeType.TABLE_RENAMED:
+            if direction == "up":
+                ctx["new_name"] = change.new_value
+            else:
+                ctx["new_name"] = change.table
+                ctx["table"] = change.new_value
+
+        elif ct == ChangeType.COLUMN_RENAMED:
+            if direction == "up":
+                ctx["column"] = change.column
+                ctx["new_name"] = change.new_value
+            else:
+                ctx["column"] = change.new_value
+                ctx["new_name"] = change.column
 
         return ctx

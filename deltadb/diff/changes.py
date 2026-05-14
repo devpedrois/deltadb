@@ -19,6 +19,8 @@ class ChangeType(Enum):
     FK_DROPPED = "fk_dropped"
     UNIQUE_CONSTRAINT_ADDED = "unique_constraint_added"
     UNIQUE_CONSTRAINT_DROPPED = "unique_constraint_dropped"
+    TABLE_RENAMED = "table_renamed"
+    COLUMN_RENAMED = "column_renamed"
 
 
 @dataclass(frozen=True)

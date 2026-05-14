@@ -6,6 +6,7 @@ from rich.console import Console
 from rich.markup import escape as markup_escape
 
 from deltadb.diff.engine import DiffEngine
+from deltadb.diff.rename import RenameDetector
 from deltadb.exceptions import DeltaDbError, SecurityError
 from deltadb.generator.dialects import Dialect, detect_dialect
 from deltadb.generator.sql_generator import SqlGenerator
@@ -155,9 +156,14 @@ def diff_cmd(
         target_schema = create_loader(target).load()
         changes = DiffEngine().diff(source_schema, target_schema)
 
-        # Rename detection — PR #7 placeholder
-        _ = detect_renames
-        _ = rename_threshold
+        if detect_renames:
+            if not (0.0 < rename_threshold <= 1.0):
+                # [SECURITY] Reject out-of-range threshold before it reaches RenameDetector.
+                # threshold <= 0.0 matches every DROP+ADD pair, hiding destructive operations.
+                raise ValueError(
+                    f"--rename-threshold must be in range (0.0, 1.0], got {rename_threshold!r}"
+                )
+            changes = RenameDetector(threshold=rename_threshold).apply(changes)
 
         def _resolved_dialect() -> Dialect:
             return (
@@ -204,6 +210,9 @@ def diff_cmd(
         else:
             print_diff(changes, console)
 
+    except ValueError as e:
+        console.print(f"[red]Invalid argument: {markup_escape(str(e))}[/red]")
+        raise SystemExit(1)
     except SecurityError as e:
         # [SECURITY] markup_escape + mask_url — security error messages are safe to show
         console.print(f"[red]Security error: {markup_escape(str(e))}[/red]")
