@@ -31,6 +31,8 @@ _TYPE_SQL_KEYWORDS = frozenset({
     "create", "truncate", "exec", "execute", "grant", "revoke",
     "table", "database", "schema", "index", "from", "where", "into",
     "join", "having", "order", "group", "by",
+    # [SECURITY] 'none' is not a SQL type — blocks 'type: null' str(None) bypass
+    "none", "null",
 })
 
 # [SECURITY] Dangerous patterns in default values — SQL metacharacters

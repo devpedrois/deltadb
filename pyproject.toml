@@ -28,6 +28,7 @@ select = ["E", "F", "I"]
 [tool.pytest.ini_options]
 markers = [
     "integration: marks tests as integration (requires Docker)",
+    "docker_security: marks tests that verify running Docker container hardening",
 ]
 
 [tool.setuptools.packages.find]

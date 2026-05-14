@@ -3,7 +3,13 @@ import os
 import pytest
 import yaml
 
+from deltadb.diff.changes import Change, ChangeType
 from deltadb.exceptions import LoaderError, SecurityError
+from deltadb.generator.dialects import Dialect
+from deltadb.generator.sql_generator import SqlGenerator
+from deltadb.model.column import Column
+from deltadb.model.schema import SchemaModel
+from deltadb.model.table import Table
 from deltadb.security.credentials import get_credential, mask_url
 from deltadb.security.identifiers import quote_identifier, validate_identifier
 from deltadb.security.path_safety import validate_output_path
@@ -128,3 +134,88 @@ def test_unknown_root_key_rejected(tmp_path):
     )
     with pytest.raises(LoaderError, match="Unexpected keys"):
         safe_load_yaml(str(f))
+
+
+# --- Additional adversarial tests ---
+
+
+def test_rejects_single_quote_in_identifier():
+    with pytest.raises(SecurityError):
+        validate_identifier("col'--")
+
+
+def test_rejects_comment_markers_in_identifier():
+    with pytest.raises(SecurityError):
+        validate_identifier("col/*injection*/")
+
+
+def test_valid_table_2024_passes():
+    validate_identifier("valid_table_2024")
+
+
+def test_sql_generator_create_table_quoted(tmp_path):
+    col = Column(name="id", type="integer", nullable=False, primary_key=True)
+    tbl = Table(name="user_orders_2024", columns=(col,))
+    schema = SchemaModel(tables={"user_orders_2024": tbl}, dialect="postgresql")
+    change = Change(
+        type=ChangeType.TABLE_ADDED,
+        table="user_orders_2024",
+        new_value=tbl,
+    )
+    gen = SqlGenerator(Dialect.POSTGRESQL)
+    sql = gen.generate([change], schema)
+    assert '"user_orders_2024"' in sql
+
+
+def test_sql_generator_rejects_injection_in_table_name(tmp_path):
+    col = Column(name="id", type="integer", nullable=False, primary_key=True)
+    tbl = Table(name="user_orders_2024", columns=(col,))
+    schema = SchemaModel(tables={"user_orders_2024": tbl}, dialect="postgresql")
+    change = Change(
+        type=ChangeType.TABLE_ADDED,
+        table="evil; DROP TABLE x",
+        new_value=tbl,
+    )
+    gen = SqlGenerator(Dialect.POSTGRESQL)
+    with pytest.raises(SecurityError):
+        gen.generate([change], schema)
+
+
+def test_yaml_column_missing_type_raises_loader_error(tmp_path):
+    f = tmp_path / "missing_type.yml"
+    f.write_text("tables:\n  t:\n    columns:\n      - name: id\n")
+    with pytest.raises(LoaderError, match="must have 'name' and 'type'"):
+        safe_load_yaml(str(f))
+
+
+def test_mask_url_password_with_at_and_hash():
+    url = "mysql://root:p@ss#w0rd@host/db"
+    masked = mask_url(url)
+    assert "p@ss#w0rd" not in masked
+    assert "****" in masked
+    assert masked.startswith("mysql://root:****@")
+
+
+def test_db_loader_operational_error_no_password():
+    from unittest.mock import MagicMock, patch
+
+    from sqlalchemy.exc import OperationalError
+
+    from deltadb.exceptions import LoaderError
+    from deltadb.loader.db_loader import DbLoader
+
+    url = "postgresql://admin:SuperSecret99@host:5432/db"
+    loader = DbLoader(url)
+
+    fake_engine = MagicMock()
+    fake_engine.dialect.name = "postgresql"
+    fake_engine.dispose = MagicMock()
+
+    op_err = OperationalError("connection refused", None, None)
+
+    with patch("deltadb.loader.db_loader.create_engine", return_value=fake_engine):
+        with patch("deltadb.loader.db_loader.inspect", side_effect=op_err):
+            with pytest.raises(LoaderError) as exc_info:
+                loader.load()
+
+    assert "SuperSecret99" not in str(exc_info.value)

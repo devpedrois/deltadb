@@ -4,6 +4,21 @@ from deltadb.config import SUPPORTED_OUTPUT_EXTENSIONS
 from deltadb.exceptions import SecurityError
 
 
+def _reject_symlink_escape(p: Path, label: str) -> None:
+    # [SECURITY] Symlink traversal prevention — a symlink pointing outside
+    # the working directory bypasses the '../' and absolute-path checks.
+    # Resolve follows all symlinks; relative_to verifies containment in cwd.
+    resolved = p.resolve()
+    cwd = Path.cwd().resolve()
+    try:
+        resolved.relative_to(cwd)
+    except ValueError:
+        raise SecurityError(
+            f"Symlink traversal detected: {label} '{p}' resolves to '{resolved}' "
+            "which is outside the working directory."
+        )
+
+
 def validate_input_path(path_str: str) -> None:
     """Reject path traversal in schema input file paths.
 
@@ -19,6 +34,9 @@ def validate_input_path(path_str: str) -> None:
         raise SecurityError(
             f"Path traversal detected in input path: '{path_str}' contains '..'"
         )
+    # [SECURITY] Symlink check — file must not resolve outside cwd
+    if p.exists():
+        _reject_symlink_escape(p, "input path")
 
 
 def validate_output_path(path_str: str) -> Path:
@@ -32,11 +50,21 @@ def validate_output_path(path_str: str) -> Path:
     # [SECURITY] Path traversal prevention — reject '..' components
     if ".." in p.parts:
         raise SecurityError(f"Path traversal detected: '{path_str}' contains '..'")
+    # [SECURITY] Case-sensitive extension check — .SQL and .JSON are not allowed;
+    # accepting uppercase silently would bypass the routing logic in cli.py.
     if p.suffix not in SUPPORTED_OUTPUT_EXTENSIONS:
         raise SecurityError(
             f"Unsupported output extension '{p.suffix}'. "
             f"Allowed: {SUPPORTED_OUTPUT_EXTENSIONS}"
         )
-    # [SECURITY] mkdir avoids symlink-based traversal since we already rejected '..'
+    # [SECURITY] Symlink check before mkdir — detect symlink traversal in parent
+    # directories before we create anything on disk.
+    if p.parent != Path(".") and p.parent.exists():
+        _reject_symlink_escape(p.parent, "output directory")
+    if p.exists():
+        _reject_symlink_escape(p, "output path")
     p.parent.mkdir(parents=True, exist_ok=True)
+    # [SECURITY] Post-mkdir check — a race window exists between the checks above
+    # and mkdir; verify again after creation.
+    _reject_symlink_escape(p.parent.resolve(), "output directory (post-mkdir)")
     return p

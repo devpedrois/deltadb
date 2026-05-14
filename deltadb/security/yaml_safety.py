@@ -3,7 +3,12 @@ from pathlib import Path
 
 import yaml
 
-from deltadb.config import MAX_YAML_SIZE_BYTES, SUPPORTED_DIALECTS
+from deltadb.config import (
+    MAX_COLUMNS_PER_TABLE,
+    MAX_TABLES,
+    MAX_YAML_SIZE_BYTES,
+    SUPPORTED_DIALECTS,
+)
 from deltadb.exceptions import LoaderError, SecurityError
 from deltadb.security.identifiers import (
     validate_column_type,
@@ -67,6 +72,12 @@ def _validate_yaml_structure(data: dict) -> None:
     _validate_dialect(data.get("dialect"))
     if "tables" not in data or not isinstance(data["tables"], dict):
         raise LoaderError("YAML must have 'tables' as a mapping")
+    # [SECURITY] Anchor-expansion DoS — reject schemas with excessive table count
+    if len(data["tables"]) > MAX_TABLES:
+        raise SecurityError(
+            f"Table count {len(data['tables'])} exceeds maximum {MAX_TABLES}. "
+            "Possible anchor-expansion DoS."
+        )
     for table_name, table_def in data["tables"].items():
         # [SECURITY] Validate table names as SQL identifiers — defense in depth
         validate_identifier(str(table_name))
@@ -81,6 +92,12 @@ def _validate_yaml_structure(data: dict) -> None:
             raise LoaderError(
                 f"Unexpected keys in table '{table_name}': {unexpected_table}"
             )
+        # [SECURITY] Anchor-expansion DoS — reject tables with excessive column count
+        if len(table_def["columns"]) > MAX_COLUMNS_PER_TABLE:
+            raise SecurityError(
+                f"Column count {len(table_def['columns'])} in table '{table_name}' "
+                f"exceeds maximum {MAX_COLUMNS_PER_TABLE}."
+            )
         for col in table_def["columns"]:
             if not isinstance(col, dict) or "name" not in col or "type" not in col:
                 raise LoaderError(
@@ -88,6 +105,12 @@ def _validate_yaml_structure(data: dict) -> None:
                 )
             # [SECURITY] Validate column names as SQL identifiers — defense in depth
             validate_identifier(str(col["name"]))
+            # [SECURITY] Explicit None check — YAML 'type: null' sets col["type"]=None;
+            # str(None)="None" passes the regex without this guard.
+            if col["type"] is None:
+                raise LoaderError(
+                    f"Column type cannot be null in table '{table_name}'"
+                )
             # [SECURITY] Validate column type — prevents type-field SQL injection
             validate_column_type(str(col["type"]))
             # [SECURITY] Validate default values — reject SQL metacharacters
