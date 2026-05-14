@@ -115,3 +115,34 @@ def test_schema_b_orders_no_foreign_key():
     loader = YamlLoader(os.path.join(FIXTURES, "schema_b.yml"))
     schema = loader.load()
     assert schema.tables["orders"].foreign_keys == ()
+
+
+def test_rejects_numeric_index_column_name(tmp_path):
+    f = tmp_path / "bad.yml"
+    f.write_text(
+        "tables:\n  t:\n    columns:\n      - name: id\n        type: int\n"
+        "    indexes:\n      - name: idx_t\n        columns: [123]\n"
+    )
+    with pytest.raises(LoaderError, match="Expected a string"):
+        YamlLoader(str(f)).load()
+
+
+def test_rejects_numeric_fk_column_name(tmp_path):
+    f = tmp_path / "bad.yml"
+    f.write_text(
+        "tables:\n  t:\n    columns:\n      - name: id\n        type: int\n"
+        "    foreign_keys:\n      - columns: [123]\n        referred_table: other\n"
+        "        referred_columns: [id]\n"
+    )
+    with pytest.raises(LoaderError, match="Expected a string"):
+        YamlLoader(str(f)).load()
+
+
+def test_rejects_numeric_uc_column_name(tmp_path):
+    f = tmp_path / "bad.yml"
+    f.write_text(
+        "tables:\n  t:\n    columns:\n      - name: id\n        type: int\n"
+        "    unique_constraints:\n      - columns: [42]\n"
+    )
+    with pytest.raises(LoaderError, match="Expected a string"):
+        YamlLoader(str(f)).load()

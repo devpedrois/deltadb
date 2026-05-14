@@ -300,3 +300,14 @@ class TestSecurityIdentifierInjection:
     def test_quote_identifier_mysql(self):
         from deltadb.security.identifiers import quote_identifier
         assert quote_identifier("users", "mysql") == "`users`"
+
+
+class TestGeneratorInit:
+    def test_invalid_dialect_templates_raises_template_render_error(self):
+        from unittest.mock import patch
+        from deltadb.exceptions import TemplateRenderError
+        from deltadb.generator.dialects import Dialect
+
+        with patch("deltadb.generator.sql_generator.PackageLoader", side_effect=ValueError("no such dir")):
+            with pytest.raises(TemplateRenderError, match="Failed to initialize templates"):
+                SqlGenerator(Dialect.POSTGRESQL)

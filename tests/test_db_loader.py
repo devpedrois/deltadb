@@ -187,3 +187,72 @@ def test_snapshot_cli_e2e():
         assert "orders" in result.output
     finally:
         Path(tmp).unlink(missing_ok=True)
+
+
+def test_callable_default_is_skipped(caplog):
+    """Callable (expression) defaults from SQLAlchemy must be silently skipped, not crash."""
+    from unittest.mock import patch, MagicMock
+    import logging
+
+    url, tmp = _create_sqlite_db()
+    try:
+        loader = DbLoader(url)
+        # Patch inspector to return a callable default for one column
+        original_reflect = loader._reflect_table
+
+        def patched_reflect(inspector, table_name, dialect):
+            if table_name == "users":
+                raw_cols = inspector.get_columns(table_name)
+                for col in raw_cols:
+                    if col["name"] == "email":
+                        col["default"] = lambda: "dynamic"  # callable
+                # Use actual method but with patched column list
+                with patch.object(inspector, "get_columns", return_value=raw_cols):
+                    return original_reflect(inspector, table_name, dialect)
+            return original_reflect(inspector, table_name, dialect)
+
+        with caplog.at_level(logging.WARNING, logger="deltadb.loader.db_loader"):
+            with patch.object(loader, "_reflect_table", patched_reflect):
+                from sqlalchemy import create_engine, inspect as sa_inspect
+                engine = create_engine(url)
+                inspector = sa_inspect(engine)
+                dialect_name = engine.dialect.name
+                table = loader._reflect_table(inspector, "users", dialect_name)
+                engine.dispose()
+
+        # The column with callable default must have default=None
+        email_col = next(c for c in table.columns if c.name == "email")
+        assert email_col.default is None
+        assert any("callable" in r.message.lower() for r in caplog.records)
+    finally:
+        Path(tmp).unlink(missing_ok=True)
+
+
+def test_non_string_non_callable_default_is_skipped(caplog):
+    """Defaults with unexpected types (not str/int/float/bool) must be skipped with warning."""
+    import logging
+    from unittest.mock import patch
+
+    url, tmp = _create_sqlite_db()
+    try:
+        loader = DbLoader(url)
+        from sqlalchemy import create_engine, inspect as sa_inspect
+        engine = create_engine(url)
+        inspector = sa_inspect(engine)
+        dialect_name = engine.dialect.name
+
+        raw_cols = inspector.get_columns("users")
+        for col in raw_cols:
+            if col["name"] == "email":
+                col["default"] = object()  # unsupported type
+
+        with caplog.at_level(logging.WARNING, logger="deltadb.loader.db_loader"):
+            with patch.object(inspector, "get_columns", return_value=raw_cols):
+                table = loader._reflect_table(inspector, "users", dialect_name)
+
+        engine.dispose()
+        email_col = next(c for c in table.columns if c.name == "email")
+        assert email_col.default is None
+        assert any("unsupported default type" in r.message.lower() for r in caplog.records)
+    finally:
+        Path(tmp).unlink(missing_ok=True)

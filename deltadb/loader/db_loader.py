@@ -5,7 +5,7 @@ from sqlalchemy import create_engine, inspect
 from sqlalchemy.engine.reflection import Inspector
 
 from deltadb.config import CONNECTION_TIMEOUT, SUPPORTED_DIALECTS
-from deltadb.exceptions import LoaderError, SecurityError
+from deltadb.exceptions import DatabaseConnectionError, DatabaseReflectionError, SecurityError
 from deltadb.loader.base import BaseLoader
 from deltadb.model.column import Column
 from deltadb.model.constraint import ForeignKey, PrimaryKey, UniqueConstraint
@@ -31,7 +31,9 @@ class DbLoader(BaseLoader):
         logger.info("Loader initialized for: %s", mask_url(connection_url))
 
     def _validate_url(self) -> None:
-        # [SECURITY] Connection string scheme validation — allowlist only
+        # [SECURITY] Connection string scheme validation — allowlist only.
+        # Raises SecurityError (not DatabaseConnectionError) because an unsupported
+        # scheme is a security boundary violation, not a connection failure.
         parsed = urlparse(self._url)
         scheme = parsed.scheme.split("+")[0]
         if scheme not in SUPPORTED_DIALECTS:
@@ -66,14 +68,14 @@ class DbLoader(BaseLoader):
                     inspector, table_name, dialect_name
                 )
             return SchemaModel(tables=tables, dialect=dialect_name)
-        except SecurityError:
+        except (SecurityError, DatabaseConnectionError, DatabaseReflectionError):
             raise
         except Exception as e:
             # [SECURITY] Never expose raw error with connection string.
             # Use `from None` to break the cause chain — the original SQLAlchemy
             # exception may include the raw connection URL in its message.
             safe_url = mask_url(self._url)
-            raise LoaderError(
+            raise DatabaseReflectionError(
                 f"Failed to load schema from {safe_url}: {type(e).__name__}"
             ) from None
         finally:
@@ -95,14 +97,32 @@ class DbLoader(BaseLoader):
             validate_identifier(c["name"])
             col_default = None
             if c.get("default") is not None:
-                raw_default = str(c["default"])
-                # [SECURITY] Reject control characters in reflected defaults
-                _reject_dangerous_bytes(raw_default, "column default")
-                # [SECURITY] Reject SQL injection patterns in reflected defaults.
-                # Uses validate_reflected_default (not validate_default) because
-                # legitimate DB expressions like nextval('seq'::regclass) contain quotes.
-                validate_reflected_default(raw_default)
-                col_default = raw_default
+                raw = c["default"]
+                if callable(raw):
+                    # SQLAlchemy may return callable objects for expression defaults
+                    # (e.g. FetchedValue). These cannot be represented as SQL text.
+                    logger.warning(
+                        "Column '%s' in table '%s' has a callable default "
+                        "(expression/server-side) — default skipped",
+                        c["name"], table_name,
+                    )
+                elif not isinstance(raw, (str, int, float, bool)):
+                    # [SECURITY] Reject unexpected types — avoids silent str() coercion
+                    # of objects that stringify to non-SQL representations.
+                    logger.warning(
+                        "Column '%s' in table '%s' has unsupported default type '%s' "
+                        "— default skipped",
+                        c["name"], table_name, type(raw).__name__,
+                    )
+                else:
+                    raw_default = str(raw)
+                    # [SECURITY] Reject control characters in reflected defaults
+                    _reject_dangerous_bytes(raw_default, "column default")
+                    # [SECURITY] Reject SQL injection patterns in reflected defaults.
+                    # Uses validate_reflected_default (not validate_default) because
+                    # legitimate DB expressions like nextval('seq'::regclass) contain quotes.
+                    validate_reflected_default(raw_default)
+                    col_default = raw_default
             columns.append(Column(
                 name=c["name"],
                 type=normalize_type(str(c["type"]), dialect),

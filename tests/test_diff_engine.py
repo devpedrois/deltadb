@@ -1,7 +1,8 @@
 import pytest
 
 from deltadb.diff.changes import ChangeType
-from deltadb.diff.engine import DiffEngine
+from deltadb.diff.engine import DiffEngine, _detect_circular_fk
+from deltadb.exceptions import CircularDependencyError
 from deltadb.model.column import Column
 from deltadb.model.constraint import ForeignKey, UniqueConstraint
 from deltadb.model.index import Index
@@ -221,3 +222,51 @@ class TestMultipleChanges:
 
         dropped = [c for c in changes if c.type == ChangeType.TABLE_DROPPED]
         assert all(c.destructive for c in dropped)
+
+
+class TestCircularFKDetection:
+    def _make_fk(self, referred: str) -> ForeignKey:
+        return ForeignKey(
+            name=None, columns=("id",), referred_table=referred, referred_columns=("id",)
+        )
+
+    def test_no_cycle_passes(self):
+        schema = make_schema(
+            Table("users", (Column("id", "integer"),), foreign_keys=()),
+            Table("orders", (Column("id", "integer"),), foreign_keys=(self._make_fk("users"),)),
+        )
+        _detect_circular_fk(schema)  # must not raise
+
+    def test_direct_cycle_raises(self):
+        # users.fk -> orgs, orgs.fk -> users
+        schema = make_schema(
+            Table("users", (Column("id", "integer"),), foreign_keys=(self._make_fk("orgs"),)),
+            Table("orgs", (Column("id", "integer"),), foreign_keys=(self._make_fk("users"),)),
+        )
+        with pytest.raises(CircularDependencyError, match="Circular foreign key"):
+            _detect_circular_fk(schema)
+
+    def test_transitive_cycle_raises(self):
+        # a -> b -> c -> a
+        schema = make_schema(
+            Table("a", (Column("id", "integer"),), foreign_keys=(self._make_fk("b"),)),
+            Table("b", (Column("id", "integer"),), foreign_keys=(self._make_fk("c"),)),
+            Table("c", (Column("id", "integer"),), foreign_keys=(self._make_fk("a"),)),
+        )
+        with pytest.raises(CircularDependencyError, match="Circular foreign key"):
+            _detect_circular_fk(schema)
+
+    def test_fk_to_external_table_no_cycle(self):
+        # FK to a table not in schema (cross-schema) — not a cycle, no raise
+        schema = make_schema(
+            Table("orders", (Column("id", "integer"),), foreign_keys=(self._make_fk("external_users"),)),
+        )
+        _detect_circular_fk(schema)  # must not raise
+
+    def test_diff_raises_on_circular_fk(self):
+        schema = make_schema(
+            Table("users", (Column("id", "integer"),), foreign_keys=(self._make_fk("orgs"),)),
+            Table("orgs", (Column("id", "integer"),), foreign_keys=(self._make_fk("users"),)),
+        )
+        with pytest.raises(CircularDependencyError):
+            DiffEngine().diff(schema, schema)

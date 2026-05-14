@@ -98,6 +98,45 @@ def _schema_to_dict(schema: SchemaModel) -> dict:
     return result
 
 
+class _SnapshotCommand:
+    """Business logic for schema snapshot. No I/O decisions, no error handling."""
+
+    def execute(self, source: str) -> tuple["SchemaModel", str]:
+        schema = create_loader(source).load()
+        yml_str = yaml.dump(
+            _schema_to_dict(schema),
+            Dumper=_SafeDumperWithQuotedStr,
+            default_flow_style=False,
+            sort_keys=False,
+            allow_unicode=True,
+        )
+        return schema, yml_str
+
+
+class _DiffCommand:
+    """Business logic for schema diff. No output formatting, no error handling."""
+
+    def execute(
+        self,
+        source: str,
+        target: str,
+        detect_renames: bool,
+        rename_threshold: float,
+    ) -> tuple[list, "SchemaModel", "SchemaModel"]:
+        if detect_renames and not (0.0 < rename_threshold <= 1.0):
+            # [SECURITY] Reject out-of-range threshold before it reaches RenameDetector.
+            # threshold <= 0.0 matches every DROP+ADD pair, hiding destructive operations.
+            raise ValueError(
+                f"--rename-threshold must be in range (0.0, 1.0], got {rename_threshold!r}"
+            )
+        source_schema = create_loader(source).load()
+        target_schema = create_loader(target).load()
+        changes = DiffEngine().diff(source_schema, target_schema)
+        if detect_renames:
+            changes = RenameDetector(threshold=rename_threshold).apply(changes)
+        return changes, source_schema, target_schema
+
+
 @click.group()
 @click.version_option(version="0.1.0")
 def deltadb() -> None:
@@ -115,15 +154,7 @@ def snapshot(source: str, output: str | None, verbose: bool) -> None:
         # [SECURITY] Never display raw connection string — mask credentials
         source_display = mask_url(source) if "://" in source else source
         console.print(f"[dim]Loading: {source_display}[/dim]")
-        schema = create_loader(source).load()
-        yml_data = _schema_to_dict(schema)
-        yml_str = yaml.dump(
-            yml_data,
-            Dumper=_SafeDumperWithQuotedStr,
-            default_flow_style=False,
-            sort_keys=False,
-            allow_unicode=True,
-        )
+        _, yml_str = _SnapshotCommand().execute(source)
         if output:
             out = validate_output_path(output)
             out.write_text(yml_str, encoding="utf-8")
@@ -179,18 +210,9 @@ def diff_cmd(
             console.print(f"[dim]Source: {source_display}[/dim]")
             console.print(f"[dim]Target: {target_display}[/dim]")
 
-        source_schema = create_loader(source).load()
-        target_schema = create_loader(target).load()
-        changes = DiffEngine().diff(source_schema, target_schema)
-
-        if detect_renames:
-            if not (0.0 < rename_threshold <= 1.0):
-                # [SECURITY] Reject out-of-range threshold before it reaches RenameDetector.
-                # threshold <= 0.0 matches every DROP+ADD pair, hiding destructive operations.
-                raise ValueError(
-                    f"--rename-threshold must be in range (0.0, 1.0], got {rename_threshold!r}"
-                )
-            changes = RenameDetector(threshold=rename_threshold).apply(changes)
+        changes, source_schema, target_schema = _DiffCommand().execute(
+            source, target, detect_renames, rename_threshold
+        )
 
         def _resolved_dialect() -> Dialect:
             return (

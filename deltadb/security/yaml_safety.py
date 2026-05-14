@@ -36,6 +36,16 @@ class _NoDuplicateKeyLoader(yaml.SafeLoader):
         return super().construct_mapping(node, deep=deep)
 _ALLOWED_TABLE_KEYS = {"columns", "indexes", "foreign_keys", "unique_constraints"}
 
+
+def _require_string(value: object, context: str) -> None:
+    # [SECURITY] Explicit type gate — prevents silent coercion of YAML numeric/bool
+    # values into SQL identifiers. str(123) = "123" passes the regex gate only to
+    # fail later with a misleading error; reject early with a clear message instead.
+    if not isinstance(value, str):
+        raise LoaderError(
+            f"Expected a string for {context}, got {type(value).__name__!r}: {value!r}"
+        )
+
 # [SECURITY] Allowlist for FK referential actions — prevents action-field injection
 _ALLOWED_FK_ACTIONS = frozenset(
     {"CASCADE", "SET NULL", "SET DEFAULT", "RESTRICT", "NO ACTION"}
@@ -136,24 +146,35 @@ def _validate_yaml_structure(data: dict) -> None:
         for idx in table_def.get("indexes", []):
             # [SECURITY] Validate index name — prevent identifier injection
             if idx.get("name") is not None:
-                validate_identifier(str(idx["name"]))
+                _require_string(idx["name"], f"index name in table '{table_name}'")
+                validate_identifier(idx["name"])
             for col_name in idx.get("columns", []):
-                validate_identifier(str(col_name))
+                # [SECURITY] Explicit type check — numeric YAML values (e.g. columns: [123])
+                # would silently coerce via str(), producing "123" which fails the
+                # identifier regex but with a confusing error message.
+                _require_string(col_name, f"index column name in table '{table_name}'")
+                validate_identifier(col_name)
         for fk in table_def.get("foreign_keys", []):
             # [SECURITY] Validate FK name, column names, referred table/columns, actions
             if fk.get("name") is not None:
-                validate_identifier(str(fk["name"]))
+                _require_string(fk["name"], f"FK name in table '{table_name}'")
+                validate_identifier(fk["name"])
             for col_name in fk.get("columns", []):
-                validate_identifier(str(col_name))
+                _require_string(col_name, f"FK column name in table '{table_name}'")
+                validate_identifier(col_name)
             if "referred_table" in fk:
-                validate_identifier(str(fk["referred_table"]))
+                _require_string(fk["referred_table"], f"FK referred_table in table '{table_name}'")
+                validate_identifier(fk["referred_table"])
             for col_name in fk.get("referred_columns", []):
-                validate_identifier(str(col_name))
+                _require_string(col_name, f"FK referred_column in table '{table_name}'")
+                validate_identifier(col_name)
             _validate_fk_action(fk.get("on_delete"), "on_delete")
             _validate_fk_action(fk.get("on_update"), "on_update")
         for uc in table_def.get("unique_constraints", []):
             # [SECURITY] Validate unique constraint name and column names
             if uc.get("name") is not None:
-                validate_identifier(str(uc["name"]))
+                _require_string(uc["name"], f"unique constraint name in table '{table_name}'")
+                validate_identifier(uc["name"])
             for col_name in uc.get("columns", []):
-                validate_identifier(str(col_name))
+                _require_string(col_name, f"unique constraint column in table '{table_name}'")
+                validate_identifier(col_name)

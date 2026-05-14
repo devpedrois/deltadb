@@ -6,12 +6,53 @@ from deltadb.diff.comparators import (
     compare_indexes,
     compare_unique_constraints,
 )
+from deltadb.exceptions import CircularDependencyError
 from deltadb.model.schema import SchemaModel
 from deltadb.security.identifiers import (
     validate_column_type,
     validate_default,
     validate_identifier,
 )
+
+
+def _detect_circular_fk(schema: SchemaModel) -> None:
+    """Detect circular FK references via DFS cycle detection.
+
+    A circular FK (users.org_id -> orgs.user_id -> users) is semantically
+    invalid and would cause the topological sort in SqlGenerator to hang or
+    produce wrong migration order. Catch it here with a clear error.
+    """
+    # Build adjacency list: table -> set of tables it references via FK
+    graph: dict[str, set[str]] = {name: set() for name in schema.tables}
+    for table_name, table in schema.tables.items():
+        for fk in table.foreign_keys:
+            referred = fk.referred_table
+            if referred in graph:
+                graph[table_name].add(referred)
+
+    # DFS cycle detection using three-color marking
+    WHITE, GRAY, BLACK = 0, 1, 2
+    color: dict[str, int] = {name: WHITE for name in graph}
+
+    def dfs(node: str, path: list[str]) -> None:
+        color[node] = GRAY
+        path.append(node)
+        for neighbor in graph[node]:
+            if color[neighbor] == GRAY:
+                cycle_start = path.index(neighbor)
+                cycle = " -> ".join(path[cycle_start:] + [neighbor])
+                raise CircularDependencyError(
+                    f"Circular foreign key reference detected: {cycle}. "
+                    "Circular FKs cannot be auto-migrated."
+                )
+            if color[neighbor] == WHITE:
+                dfs(neighbor, path)
+        path.pop()
+        color[node] = BLACK
+
+    for node in list(graph):
+        if color[node] == WHITE:
+            dfs(node, [])
 
 
 class DiffEngine:
@@ -66,6 +107,8 @@ class DiffEngine:
     def diff(self, source: SchemaModel, target: SchemaModel) -> list[Change]:
         self._validate_schema(source)
         self._validate_schema(target)
+        _detect_circular_fk(source)
+        _detect_circular_fk(target)
         changes: list[Change] = []
         source_names = set(source.tables)
         target_names = set(target.tables)

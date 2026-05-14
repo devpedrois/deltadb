@@ -6,7 +6,7 @@ from jinja2 import PackageLoader
 from jinja2.sandbox import SandboxedEnvironment
 
 from deltadb.diff.changes import Change, ChangeType
-from deltadb.exceptions import GeneratorError, SecurityError
+from deltadb.exceptions import GeneratorError, SecurityError, TemplateRenderError
 from deltadb.generator.dialects import Dialect
 from deltadb.generator.topological import topological_sort_down, topological_sort_up
 from deltadb.model.column import Column
@@ -112,11 +112,16 @@ class SqlGenerator:
         # ALL user-controlled values MUST pass through a registered filter (quote_id,
         # safe_default, validate_type, safe_on_action). Audit: grep -rn
         # '{{ [^|%][^}]*}}' deltadb/generator/templates/ --include="*.j2"
-        self._env = SandboxedEnvironment(
-            loader=PackageLoader("deltadb", f"generator/templates/{dialect.value}"),
-            autoescape=False,
-            keep_trailing_newline=True,
-        )
+        try:
+            self._env = SandboxedEnvironment(
+                loader=PackageLoader("deltadb", f"generator/templates/{dialect.value}"),
+                autoescape=False,
+                keep_trailing_newline=True,
+            )
+        except Exception as exc:
+            raise TemplateRenderError(
+                f"Failed to initialize templates for dialect '{dialect.value}': {exc}"
+            ) from exc
         # [SECURITY] quote_id filter — all identifiers in templates use this
         d = dialect.value
         self._env.filters["quote_id"] = lambda name: quote_identifier(name, d)
@@ -204,7 +209,7 @@ class SqlGenerator:
             # [SECURITY] Let security errors propagate unchanged — do not mask them
             raise
         except Exception as exc:
-            raise GeneratorError(
+            raise TemplateRenderError(
                 f"Template render failed for {change.type.value}"
                 f" on {change.table}: {exc}"
             ) from exc
