@@ -10,10 +10,14 @@ from deltadb.model.index import Index
 _C = TypeVar("_C")
 
 
-def _check_duplicate_names(names: list[str], label: str, table_name: str) -> None:
+def _check_duplicate_names(
+    names: list[str | None], label: str, table_name: str
+) -> None:
     seen: set[str] = set()
     duplicates: set[str] = set()
     for name in names:
+        if name is None:
+            continue
         if name in seen:
             duplicates.add(name)
         seen.add(name)
@@ -43,8 +47,8 @@ def _compare_named_constraints(
 
     named_source = [c for c in source_items if name_fn(c)]
     named_target = [c for c in target_items if name_fn(c)]
-    _check_duplicate_names([name_fn(c) for c in named_source], label, table_name)  # type: ignore[arg-type]
-    _check_duplicate_names([name_fn(c) for c in named_target], label, table_name)  # type: ignore[arg-type]
+    _check_duplicate_names([name_fn(c) for c in named_source], label, table_name)
+    _check_duplicate_names([name_fn(c) for c in named_target], label, table_name)
 
     source_by_name = {name_fn(c): c for c in source_items if name_fn(c)}
     target_by_name = {name_fn(c): c for c in target_items if name_fn(c)}

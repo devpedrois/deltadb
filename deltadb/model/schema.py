@@ -1,10 +1,16 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
 from types import MappingProxyType
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from deltadb.model.table import Table
 
 
 @dataclass(frozen=True)
 class SchemaModel:
-    tables: MappingProxyType
+    tables: MappingProxyType[str, Table]
     dialect: str | None = None
 
     def __post_init__(self) -> None:

@@ -2,6 +2,7 @@ from difflib import SequenceMatcher
 
 from deltadb.config import DEFAULT_RENAME_THRESHOLD
 from deltadb.diff.changes import Change, ChangeType
+from deltadb.model.column import Column
 from deltadb.model.table import Table
 
 
@@ -20,7 +21,7 @@ class RenameDetector:
             sorted(f"{c.name}:{c.type}:{c.nullable}" for c in table.columns)
         )
 
-    def _col_sig(self, col) -> str:
+    def _col_sig(self, col: Column) -> str:
         # NOTE: encodes only type and nullability. When multiple dropped/added columns
         # share the same signature, the 1:1 pairing is stable (alphabetical by column name)
         # but semantically arbitrary — rename suggestions must always be reviewed by the user.
@@ -32,12 +33,16 @@ class RenameDetector:
     def _detect_table_renames(
         self, dropped: list[Change], added: list[Change]
     ) -> list[tuple[Change, Change]]:
-        candidates = [
-            (d, a, self._table_similarity(d.old_value, a.new_value))
-            for d in dropped
-            for a in added
-            if self._table_similarity(d.old_value, a.new_value) >= self._threshold
-        ]
+        sigs_dropped = {id(d): self._table_sig(d.old_value) for d in dropped}
+        sigs_added = {id(a): self._table_sig(a.new_value) for a in added}
+        candidates: list[tuple[Change, Change, float]] = []
+        for d in dropped:
+            for a in added:
+                score = SequenceMatcher(
+                    None, sigs_dropped[id(d)], sigs_added[id(a)]
+                ).ratio()
+                if score >= self._threshold:
+                    candidates.append((d, a, score))
         candidates.sort(key=lambda x: x[2], reverse=True)
 
         matched: list[tuple[Change, Change]] = []
@@ -53,13 +58,18 @@ class RenameDetector:
     def _detect_column_renames(
         self, col_dropped: list[Change], col_added: list[Change]
     ) -> list[tuple[Change, Change]]:
-        candidates = [
-            (d, a, SequenceMatcher(None, self._col_sig(d.old_value), self._col_sig(a.new_value)).ratio())
-            for d in col_dropped
-            for a in col_added
-            if d.table == a.table
-            and SequenceMatcher(None, self._col_sig(d.old_value), self._col_sig(a.new_value)).ratio() >= self._threshold
-        ]
+        sigs_dropped = {id(d): self._col_sig(d.old_value) for d in col_dropped}
+        sigs_added = {id(a): self._col_sig(a.new_value) for a in col_added}
+        candidates: list[tuple[Change, Change, float]] = []
+        for d in col_dropped:
+            for a in col_added:
+                if d.table != a.table:
+                    continue
+                score = SequenceMatcher(
+                    None, sigs_dropped[id(d)], sigs_added[id(a)]
+                ).ratio()
+                if score >= self._threshold:
+                    candidates.append((d, a, score))
         candidates.sort(key=lambda x: x[2], reverse=True)
 
         matched: list[tuple[Change, Change]] = []

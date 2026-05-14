@@ -1,3 +1,5 @@
+from collections import defaultdict, deque
+
 from deltadb.diff.changes import Change, ChangeType
 from deltadb.exceptions import GeneratorError
 from deltadb.model.schema import SchemaModel
@@ -33,11 +35,11 @@ def _topo_sort_tables(deps: dict[str, set[str]]) -> list[str]:
                 in_degree[table] += 1
                 dependents[dep].append(table)
 
-    queue = sorted(t for t, d in in_degree.items() if d == 0)
+    queue: deque[str] = deque(sorted(t for t, d in in_degree.items() if d == 0))
     result: list[str] = []
 
     while queue:
-        node = queue.pop(0)
+        node = queue.popleft()
         result.append(node)
         for dependent in sorted(dependents[node]):
             in_degree[dependent] -= 1
@@ -67,22 +69,27 @@ def topological_sort_up(changes: list[Change], schema: SchemaModel) -> list[Chan
     6. COLUMN_DROPPED
     7. TABLE_DROPPED — dependents before referenced (reverse topo)
     """
-    table_added = [c for c in changes if c.type == ChangeType.TABLE_ADDED]
-    table_dropped = [c for c in changes if c.type == ChangeType.TABLE_DROPPED]
-    fk_added = [c for c in changes if c.type == ChangeType.FK_ADDED]
-    fk_dropped = [c for c in changes if c.type == ChangeType.FK_DROPPED]
-    col_dropped = [c for c in changes if c.type == ChangeType.COLUMN_DROPPED]
-    idx_dropped = [c for c in changes if c.type == ChangeType.INDEX_DROPPED]
-    uc_dropped = [c for c in changes if c.type == ChangeType.UNIQUE_CONSTRAINT_DROPPED]
-    other = [
-        c for c in changes
-        if c.type not in {
-            ChangeType.TABLE_ADDED, ChangeType.TABLE_DROPPED,
-            ChangeType.FK_ADDED, ChangeType.FK_DROPPED,
-            ChangeType.COLUMN_DROPPED, ChangeType.INDEX_DROPPED,
-            ChangeType.UNIQUE_CONSTRAINT_DROPPED,
-        }
-    ]
+    _bucketed_types = {
+        ChangeType.TABLE_ADDED, ChangeType.TABLE_DROPPED,
+        ChangeType.FK_ADDED, ChangeType.FK_DROPPED,
+        ChangeType.COLUMN_DROPPED, ChangeType.INDEX_DROPPED,
+        ChangeType.UNIQUE_CONSTRAINT_DROPPED,
+    }
+    buckets: dict[ChangeType, list[Change]] = defaultdict(list)
+    other: list[Change] = []
+    for c in changes:
+        if c.type in _bucketed_types:
+            buckets[c.type].append(c)
+        else:
+            other.append(c)
+
+    table_added = buckets[ChangeType.TABLE_ADDED]
+    table_dropped = buckets[ChangeType.TABLE_DROPPED]
+    fk_added = buckets[ChangeType.FK_ADDED]
+    fk_dropped = buckets[ChangeType.FK_DROPPED]
+    col_dropped = buckets[ChangeType.COLUMN_DROPPED]
+    idx_dropped = buckets[ChangeType.INDEX_DROPPED]
+    uc_dropped = buckets[ChangeType.UNIQUE_CONSTRAINT_DROPPED]
 
     deps = _build_fk_deps(table_added, schema)
     sorted_names = _topo_sort_tables(deps)

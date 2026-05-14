@@ -1,6 +1,16 @@
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Union
+
+if TYPE_CHECKING:
+    from deltadb.model.column import Column
+    from deltadb.model.constraint import ForeignKey, UniqueConstraint
+    from deltadb.model.index import Index
+    from deltadb.model.table import Table
+
+ChangeValue = Union[
+    "Table", "Column", "Index", "ForeignKey", "UniqueConstraint", str, bool, None
+]
 
 
 class ChangeType(Enum):
@@ -28,7 +38,7 @@ class Change:
     type: ChangeType
     table: str
     column: str | None = None
-    old_value: Any = field(default=None, compare=True, hash=False)
-    new_value: Any = field(default=None, compare=True, hash=False)
+    old_value: ChangeValue = field(default=None, compare=True, hash=False)
+    new_value: ChangeValue = field(default=None, compare=True, hash=False)
     destructive: bool = False
     detail: str = ""

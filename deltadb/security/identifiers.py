@@ -53,8 +53,9 @@ def validate_identifier(name: str) -> None:
             "only [a-zA-Z_][a-zA-Z0-9_]* allowed. "
             "Potential SQL injection attempt detected."
         )
+    name_lower = name.lower()
     for pattern in _IDENTIFIER_CHAR_BLOCKLIST:
-        if pattern.lower() in name.lower():
+        if pattern.lower() in name_lower:
             raise SecurityError(
                 f"Dangerous pattern '{pattern}' in identifier '{name[:30]}'"
             )

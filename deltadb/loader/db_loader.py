@@ -2,6 +2,7 @@ import logging
 from urllib.parse import urlparse
 
 from sqlalchemy import create_engine, inspect
+from sqlalchemy.engine.reflection import Inspector
 
 from deltadb.config import CONNECTION_TIMEOUT, SUPPORTED_DIALECTS
 from deltadb.exceptions import LoaderError, SecurityError
@@ -82,7 +83,7 @@ class DbLoader(BaseLoader):
                 engine.dispose()
 
     def _reflect_table(
-        self, inspector, table_name: str, dialect: str
+        self, inspector: Inspector, table_name: str, dialect: str
     ) -> Table:
         raw_cols = inspector.get_columns(table_name)
         pk_info = inspector.get_pk_constraint(table_name)

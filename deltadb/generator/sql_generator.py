@@ -1,5 +1,6 @@
 import logging
 from datetime import UTC, datetime
+from typing import Literal
 
 from jinja2 import PackageLoader
 from jinja2.sandbox import SandboxedEnvironment
@@ -8,7 +9,10 @@ from deltadb.diff.changes import Change, ChangeType
 from deltadb.exceptions import GeneratorError, SecurityError
 from deltadb.generator.dialects import Dialect
 from deltadb.generator.topological import topological_sort_down, topological_sort_up
+from deltadb.model.column import Column
+from deltadb.model.constraint import PrimaryKey, UniqueConstraint
 from deltadb.model.schema import SchemaModel
+from deltadb.model.table import Table
 from deltadb.security.identifiers import (
     quote_identifier,
     validate_column_type,
@@ -88,16 +92,16 @@ _CHANGE_TO_DOWN_TEMPLATE: dict[ChangeType, str] = {
 }
 
 
-def _table_columns(table_obj):
-    return table_obj.columns if table_obj else []
+def _table_columns(table_obj: Table | None) -> tuple[Column, ...]:
+    return table_obj.columns if table_obj else ()
 
 
-def _table_pk(table_obj):
+def _table_pk(table_obj: Table | None) -> PrimaryKey | None:
     return table_obj.primary_key if table_obj else None
 
 
-def _table_ucs(table_obj):
-    return table_obj.unique_constraints if table_obj else []
+def _table_ucs(table_obj: Table | None) -> tuple[UniqueConstraint, ...]:
+    return table_obj.unique_constraints if table_obj else ()
 
 
 class SqlGenerator:
@@ -160,15 +164,19 @@ class SqlGenerator:
             f"{down_sql}"
         )
 
-    def _render_all(self, changes: list[Change], direction: str) -> str:
+    def _render_all(
+        self, changes: list[Change], direction: Literal["up", "down"]
+    ) -> str:
         parts: list[str] = []
         for change in changes:
-            rendered = self._render_change(change, direction)
-            if rendered.strip():
-                parts.append(rendered.strip())
+            stripped = self._render_change(change, direction).strip()
+            if stripped:
+                parts.append(stripped)
         return "\n\n".join(parts) + "\n" if parts else ""
 
-    def _render_change(self, change: Change, direction: str) -> str:
+    def _render_change(
+        self, change: Change, direction: Literal["up", "down"]
+    ) -> str:
         # These change types require manual DDL — emit a clear comment instead of wrong SQL
         if change.type in (ChangeType.COLUMN_PRIMARY_KEY_CHANGED, ChangeType.COLUMN_AUTOINCREMENT_CHANGED):
             label = "PRIMARY KEY" if change.type == ChangeType.COLUMN_PRIMARY_KEY_CHANGED else "AUTOINCREMENT"
@@ -201,7 +209,9 @@ class SqlGenerator:
                 f" on {change.table}: {exc}"
             ) from exc
 
-    def _build_context(self, change: Change, direction: str) -> dict:  # noqa: C901
+    def _build_context(  # noqa: C901
+        self, change: Change, direction: Literal["up", "down"]
+    ) -> dict[str, object]:
         ctx: dict = {"table": change.table, "dialect": self._dialect.value}
         ct = change.type
 
