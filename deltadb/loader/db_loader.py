@@ -5,7 +5,11 @@ from sqlalchemy import create_engine, inspect
 from sqlalchemy.engine.reflection import Inspector
 
 from deltadb.config import CONNECTION_TIMEOUT, SUPPORTED_DIALECTS
-from deltadb.exceptions import DatabaseConnectionError, DatabaseReflectionError, SecurityError
+from deltadb.exceptions import (
+    DatabaseConnectionError,
+    DatabaseReflectionError,
+    SecurityError,
+)
 from deltadb.loader.base import BaseLoader
 from deltadb.model.column import Column
 from deltadb.model.constraint import ForeignKey, PrimaryKey, UniqueConstraint

@@ -1,4 +1,3 @@
-import pytest
 
 from deltadb.diff.changes import Change, ChangeType
 from deltadb.generator.topological import topological_sort_down, topological_sort_up

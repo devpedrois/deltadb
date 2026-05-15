@@ -305,6 +305,7 @@ class TestSecurityIdentifierInjection:
 class TestGeneratorInit:
     def test_invalid_dialect_templates_raises_template_render_error(self):
         from unittest.mock import patch
+
         from deltadb.exceptions import TemplateRenderError
         from deltadb.generator.dialects import Dialect
 

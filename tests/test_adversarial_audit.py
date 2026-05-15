@@ -53,7 +53,6 @@ from deltadb.security.identifiers import (
 )
 from deltadb.security.path_safety import validate_output_path
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # V1 — Default validation gap (CRITICAL)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -476,7 +475,11 @@ class TestMaskUrlPropertyBased:
         # Restrict user/password/host to safe ASCII alnum to avoid false positives
         # from extremely unusual characters that confuse URL parsing heuristics.
         st.text(alphabet="abcdefghijklmnopqrstuvwxyz0123456789_", min_size=1, max_size=20),
-        st.text(alphabet="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!#$%^*", min_size=4, max_size=25),
+        st.text(
+            alphabet="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!#$%^*",
+            min_size=4,
+            max_size=25,
+        ),
         st.text(alphabet="abcdefghijklmnopqrstuvwxyz0123456789", min_size=3, max_size=20),
         st.text(alphabet="abcdefghijklmnopqrstuvwxyz0123456789", min_size=3, max_size=15),
         st.sampled_from(["postgresql", "mysql", "sqlite"]),

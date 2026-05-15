@@ -191,8 +191,8 @@ def test_snapshot_cli_e2e():
 
 def test_callable_default_is_skipped(caplog):
     """Callable (expression) defaults from SQLAlchemy must be silently skipped, not crash."""
-    from unittest.mock import patch, MagicMock
     import logging
+    from unittest.mock import patch
 
     url, tmp = _create_sqlite_db()
     try:
@@ -213,7 +213,8 @@ def test_callable_default_is_skipped(caplog):
 
         with caplog.at_level(logging.WARNING, logger="deltadb.loader.db_loader"):
             with patch.object(loader, "_reflect_table", patched_reflect):
-                from sqlalchemy import create_engine, inspect as sa_inspect
+                from sqlalchemy import create_engine
+                from sqlalchemy import inspect as sa_inspect
                 engine = create_engine(url)
                 inspector = sa_inspect(engine)
                 dialect_name = engine.dialect.name
@@ -236,7 +237,8 @@ def test_non_string_non_callable_default_is_skipped(caplog):
     url, tmp = _create_sqlite_db()
     try:
         loader = DbLoader(url)
-        from sqlalchemy import create_engine, inspect as sa_inspect
+        from sqlalchemy import create_engine
+        from sqlalchemy import inspect as sa_inspect
         engine = create_engine(url)
         inspector = sa_inspect(engine)
         dialect_name = engine.dialect.name

@@ -19,7 +19,7 @@ from deltadb.generator.dialects import Dialect
 from deltadb.generator.sql_generator import SqlGenerator
 from deltadb.generator.topological import topological_sort_up
 from deltadb.model.column import Column
-from deltadb.model.constraint import ForeignKey, PrimaryKey
+from deltadb.model.constraint import ForeignKey
 from deltadb.model.schema import SchemaModel
 from deltadb.model.table import Table
 

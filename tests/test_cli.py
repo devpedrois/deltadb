@@ -1,11 +1,10 @@
 import json
-import os
 from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
 
-from deltadb.cli import deltadb, _DiffCommand, _SnapshotCommand
+from deltadb.cli import _DiffCommand, _SnapshotCommand, deltadb
 
 # Relative from project root — validate_input_path rejects absolute paths
 SCHEMA_A = "tests/fixtures/schema_a.yml"

@@ -5,6 +5,19 @@ import yaml
 from rich.console import Console
 from rich.markup import escape as markup_escape
 
+from deltadb.diff.engine import DiffEngine
+from deltadb.diff.rename import RenameDetector
+from deltadb.exceptions import DeltaDbError, SecurityError
+from deltadb.generator.dialects import Dialect, detect_dialect
+from deltadb.generator.sql_generator import SqlGenerator
+from deltadb.loader.factory import create_loader
+from deltadb.model.schema import SchemaModel
+from deltadb.output.json_writer import export_json
+from deltadb.output.rich_printer import print_diff
+from deltadb.output.sql_writer import write_sql
+from deltadb.security.credentials import mask_url
+from deltadb.security.path_safety import validate_output_path
+
 
 class _QuotedStr(str):
     """String subclass that forces YAML double-quoting to prevent type coercion.
@@ -23,19 +36,6 @@ class _SafeDumperWithQuotedStr(yaml.SafeDumper):
 
 
 _SafeDumperWithQuotedStr.add_representer(_QuotedStr, _quoted_str_representer)
-
-from deltadb.diff.engine import DiffEngine
-from deltadb.diff.rename import RenameDetector
-from deltadb.exceptions import DeltaDbError, SecurityError
-from deltadb.generator.dialects import Dialect, detect_dialect
-from deltadb.generator.sql_generator import SqlGenerator
-from deltadb.loader.factory import create_loader
-from deltadb.model.schema import SchemaModel
-from deltadb.output.json_writer import export_json
-from deltadb.output.rich_printer import print_diff
-from deltadb.output.sql_writer import write_sql
-from deltadb.security.credentials import mask_url
-from deltadb.security.path_safety import validate_output_path
 
 console = Console()
 logger = logging.getLogger(__name__)

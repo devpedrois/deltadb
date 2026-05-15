@@ -16,7 +16,6 @@ from deltadb.model.index import Index
 from deltadb.model.schema import SchemaModel
 from deltadb.model.table import Table
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

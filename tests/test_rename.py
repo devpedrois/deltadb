@@ -1,4 +1,3 @@
-import pytest
 
 from deltadb.diff.changes import Change, ChangeType
 from deltadb.diff.rename import RenameDetector

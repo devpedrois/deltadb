@@ -3,14 +3,11 @@
 Each test documents a specific attack vector, whether it is blocked (must
 stay blocked) or was open and has been fixed (regression guard).
 """
-import json
 import os
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import pytest
-import yaml
 from click.testing import CliRunner
 
 from deltadb.cli import deltadb
@@ -22,7 +19,6 @@ from deltadb.model.column import Column
 from deltadb.model.constraint import ForeignKey
 from deltadb.model.schema import SchemaModel
 from deltadb.model.table import Table
-from deltadb.security.identifiers import validate_column_type
 from deltadb.security.path_safety import validate_input_path, validate_output_path
 from deltadb.security.yaml_safety import safe_load_yaml
 
