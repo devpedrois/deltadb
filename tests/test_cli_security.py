@@ -26,6 +26,10 @@ def runner():
 
 # ---------------------------------------------------------------------------
 # 1. Rich Markup Injection via table/column/detail fields
+
+
+
+
 # ---------------------------------------------------------------------------
 
 def _changes_with_table(table_name: str) -> list[Change]:

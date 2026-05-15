@@ -43,4 +43,8 @@ def mask_url(url: str) -> str:
 
         return raw[:authority_start] + masked_credentials + host_part + rest
     except Exception:
-        return str(url)
+        # [SECURITY] Do NOT return str(url) — if the object's __str__ embeds
+        # a raw connection string, the fallback leaks credentials. Return a
+        # safe placeholder instead. Callers must treat this as an opaque token.
+        logger.debug("mask_url: failed to mask URL, returning redacted placeholder")
+        return "[CREDENTIAL REDACTED]"

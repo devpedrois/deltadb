@@ -217,9 +217,17 @@ def compare_indexes(
 
 
 def _fk_key(fk: ForeignKey) -> tuple:
-    # Bug fix: include referred_columns in key — two FKs from the same source
-    # columns to different target columns of the same table are not equivalent.
-    return (tuple(fk.columns), fk.referred_table, tuple(fk.referred_columns))
+    # Include on_delete / on_update in key — changing referential action (e.g.
+    # CASCADE → RESTRICT) is a semantically significant schema change that must
+    # generate a DROP FK + ADD FK migration. Normalise to upper-case to avoid
+    # false positives when sources use different casing.
+    return (
+        tuple(fk.columns),
+        fk.referred_table,
+        tuple(fk.referred_columns),
+        (fk.on_delete or "").upper(),
+        (fk.on_update or "").upper(),
+    )
 
 
 def compare_foreign_keys(

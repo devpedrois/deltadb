@@ -10,8 +10,8 @@ from deltadb.exceptions import CircularDependencyError
 from deltadb.model.schema import SchemaModel
 from deltadb.security.identifiers import (
     validate_column_type,
-    validate_default,
     validate_identifier,
+    validate_reflected_default,
 )
 
 
@@ -66,10 +66,14 @@ class DiffEngine:
                 validate_identifier(col.name)
                 validate_column_type(col.type)
                 if col.default is not None:
-                    # [SECURITY] Coerce to str — YAML loaders may store int/bool
-                    # defaults without conversion, matching Column.default: str|None
-                    # at runtime. validate_default expects str; TypeError otherwise.
-                    validate_default(str(col.default))
+                    # [SECURITY] Use validate_reflected_default (not validate_default)
+                    # because at this point the schema may originate from DbLoader,
+                    # which already allowed quotes for legitimate expressions like
+                    # nextval('seq'::regclass). validate_default's quote rejection
+                    # would crash on every PostgreSQL SERIAL/SEQUENCE column.
+                    # Statement-level injections (;, --, /*, null bytes) are still
+                    # blocked by validate_reflected_default.
+                    validate_reflected_default(str(col.default))
             # [SECURITY] Validate PK name and columns — previously skipped,
             # allowing malicious PK names to bypass the trust boundary.
             if table.primary_key is not None:

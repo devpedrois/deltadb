@@ -85,15 +85,20 @@ def validate_column_type(type_str: str) -> None:
     for pattern in _TYPE_DANGEROUS:
         if pattern in type_str:
             raise SecurityError(f"Dangerous pattern in column type '{type_str[:40]}'")
-    # [SECURITY] Block SQL DDL/DML keywords in type fields. The regex allows
-    # spaces (needed for "double precision", "character varying") but that
-    # also admits "integer DROP TABLE users". Check each word individually.
-    base = type_str.strip().split("(")[0]
-    for word in base.lower().split():
-        if word in _TYPE_SQL_KEYWORDS:
-            raise SecurityError(
-                f"SQL keyword '{word}' not allowed in column type '{type_str[:40]}'"
-            )
+    # [SECURITY] Block SQL DDL/DML keywords in type fields. Split on BOTH
+    # whitespace and hyphens — the regex allows hyphens for "user-defined"
+    # (SQLAlchemy reflected type) but "integer-drop" would otherwise bypass
+    # a whitespace-only split producing the single token "integer-drop".
+    # Explicit allowlist for legitimate hyphenated types avoids false positives.
+    _HYPHENATED_TYPE_ALLOWLIST = frozenset({"user-defined", "double-precision"})
+    base = type_str.strip().split("(")[0].lower()
+    if base not in _HYPHENATED_TYPE_ALLOWLIST:
+        import re as _re
+        for word in _re.split(r"[\s\-]+", base):
+            if word and word in _TYPE_SQL_KEYWORDS:
+                raise SecurityError(
+                    f"SQL keyword '{word}' not allowed in column type '{type_str[:40]}'"
+                )
 
 
 def validate_default(value: str) -> None:

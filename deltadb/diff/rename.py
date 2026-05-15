@@ -1,9 +1,12 @@
+import logging
 from difflib import SequenceMatcher
 
-from deltadb.config import DEFAULT_RENAME_THRESHOLD
+from deltadb.config import DEFAULT_RENAME_THRESHOLD, MAX_RENAME_COMPARE_PAIRS
 from deltadb.diff.changes import Change, ChangeType
 from deltadb.model.column import Column
 from deltadb.model.table import Table
+
+logger = logging.getLogger(__name__)
 
 
 class RenameDetector:
@@ -33,6 +36,17 @@ class RenameDetector:
     def _detect_table_renames(
         self, dropped: list[Change], added: list[Change]
     ) -> list[tuple[Change, Change]]:
+        # [SECURITY] DoS guard — O(n_dropped × n_added × sig_len²) SequenceMatcher.
+        # Confirmed: 100×100 tables × 200 cols = 33 s. Skip and warn when the pair
+        # count exceeds MAX_RENAME_COMPARE_PAIRS so all other diff output is intact.
+        pair_count = len(dropped) * len(added)
+        if pair_count > MAX_RENAME_COMPARE_PAIRS:
+            logger.warning(
+                "Rename detection skipped: %d table pairs exceed limit %d. "
+                "Use smaller schemas or increase MAX_RENAME_COMPARE_PAIRS.",
+                pair_count, MAX_RENAME_COMPARE_PAIRS,
+            )
+            return []
         sigs_dropped = {id(d): self._table_sig(d.old_value) for d in dropped}
         sigs_added = {id(a): self._table_sig(a.new_value) for a in added}
         candidates: list[tuple[Change, Change, float]] = []
